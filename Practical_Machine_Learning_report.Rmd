@@ -1,0 +1,92 @@
+---
+title: "Practical Machine Learning Report"
+author: "John Goh"
+date: "September 26, 2015"
+output: html_document
+---
+
+##Overview
+In this project, we explore data collected by Velloso et al. in their study "Qualitative Activity Recognition of Weight Lifting Execise" [1]. The focus of the study was primarily the quality (i.e. the correctness of execution) by 6 participants in carrying out bicep curls, which was measured by accelerometers mounted on the the participants' gloves, armbands, lumbar belts and dumbbells. The tabulated results were then labelled with letter grades A to E, where only grade A indicates correct execution. 
+
+##Model Creation
+The training data was loaded from CSV and the variables (i.e. columns) were checked for relevance. Irrelevant variables were filtered using the grepl function (choices made are discussed below). 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(caret)
+directory <- "C:/Users/John Goh/My Documents/Professional Studies/Coursera/Data Science (John Hopkins)/08 Practical Machine Learning/Assignments/Project"
+filepath <- file.path(directory,"pml-training.csv")
+
+```
+
+```{r, echo=TRUE, message=FALSE}
+pml_training <- read.csv(filepath)
+var <- ls(pml_training)
+var_df <- data.frame(var)
+x <- var_df[!grepl("avg|var|stddev|min|max|amplitude|skewness|kurtosis|timestamp",var),]
+drops <- c("X")
+pml_training_filtered <- pml_training[, which(names(pml_training) %in% x)]
+pml_training_filtered <- pml_training_filtered[,!(names(pml_training_filtered) %in% drops)]
+```
+Half of the data was then assigned at random as training data while the other half as testing data using the *createDataPartition* function.
+```{r, echo=TRUE, message=FALSE}
+inTrain <- createDataPartition(y=pml_training_filtered$num_window,p=0.5, list=FALSE)
+training <- pml_training_filtered[inTrain,]
+testing <- pml_training_filtered[-inTrain,]
+```
+Random Forest was chosen as the predictive model, and some trainControl parameter were set to FALSE such as the *returnResamp* and *returnData*, as those are not required by Caret or Random Forest.
+```{r, echo=FALSE, message=FALSE}
+setwd("C:/Users/John Goh/My Documents/Professional Studies/Coursera/Data Science (John Hopkins)/08 Practical Machine Learning/Assignments/Project")
+model_file <- "RandomForest.Rds"
+if (file.exists(model_file)) {
+    # Read the model in and assign it to a variable.
+    model <- readRDS(model_file)
+} else {
+    # Otherwise, run the training.
+    ctrl <- trainControl(method="cv",number=5,returnData=FALSE, returnResamp="none", savePredictions=FALSE)
+    model <- train(classe ~ ., data=training, method="rf", trControl=ctrl)
+}
+```
+```{r, eval=FALSE, message=FALSE}
+ctrl <- trainControl(method="cv",number=5,returnData=FALSE, returnResamp="none", savePredictions=FALSE)
+model <- train(classe ~ ., data=training, method="rf", trControl=ctrl)
+```
+
+##Cross Validation
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+cm <- confusionMatrix(testing$classe,predict(model,testing))
+```
+
+```{r, echo=FALSE}
+cm
+```
+Cross validation with the test data (which was derived from 50% of the pml_training.csv) yielded an accuracy of around 99%.
+
+##Out of Sample Error
+
+Estimation of the out of sample accuracy was based on the results of using the model to predict cases in pml_testing.csv, which was accurated in all 20 cases. Hence it is estimated that the out of sample accuracy is at least 95%. In other words, the out of sample error would be 5% or less. 
+
+##Discussion
+
+The following section discusses some of the decisions made in the process of cleaning and partitioning the data, as well as training the model.
+
+####Cleaning the Data
+The derived variables such as mean, variance, standard deviation, maximum, minimum, amplitude, kurtosis and skewness were excluded as these variables are linearly correlated with other measured variables (e.g. those labelled as x, y and z). Furthermore, many of these variables are mostly empty. 
+
+The timestamp-related variables were also excluded as it is a linear function of time is not correlated to the correctness of exercise execution. The variable named "X" was excluded 
+
+####Training and test data
+Although it was not the traditional practise to split the original data using the 50/50 ratio, this was done as the author was working with a computer with limited memory (RAM). A 60/40 ratio, would have taken up too much memory while anything less than 50% would risk making the training dataset too small to be representative of the overall dataset.  
+
+####Model Selection
+The following are some advantages of Random Forest, which is why the author chose it the classifier method. 
+
+1. Runs efficiently on large datasets <br>
+2. Works well with multiple input variables, possibly up to hundreds or thousands <br>
+3. The results are a good representation of the different variables as voting takes place between the generated trees <br>
+
+####TrainControl variables
+Some trainControl parameter such as the *returnResamp* and *returnData* were set to FALSE, as those are not required by Caret or Random Forest whilst slowing the process of training the model significantly. 
+
+##References
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. <br>
+[2] Data Science Central. Random Forest Algorithm. Available from: http://www.datasciencecentral.com/profiles/blogs/random-forests-algorithm
